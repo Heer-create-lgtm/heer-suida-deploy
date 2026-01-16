@@ -356,28 +356,52 @@ async function loadForecast() {
     }
 
     try {
-        // Fetch available districts from ML backend
-        let districts = ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata',
-            'Hyderabad', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow'];
+        // Fetch available districts from ML backend - expanded list
+        let districts = [
+            'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata',
+            'Hyderabad', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow',
+            'Patna', 'Bhopal', 'Indore', 'Chandigarh', 'Thiruvananthapuram',
+            'Kochi', 'Coimbatore', 'Visakhapatnam', 'Nagpur', 'Vadodara',
+            'Surat', 'Kanpur', 'Agra', 'Varanasi', 'Bhilai',
+            'Raipur', 'Guwahati', 'Bhubaneswar', 'Ranchi', 'Dehradun'
+        ];
+
+        // Fetch states for state selector
+        let states = [];
+        try {
+            const stateRes = await fetch(`${API_BASE}/forecast/states`);
+            if (stateRes.ok) {
+                const stateData = await stateRes.json();
+                states = stateData.states || [];
+            }
+        } catch (e) {
+            console.log('States not available');
+        }
+
         try {
             const districtRes = await fetch(`${API_BASE}/forecast/districts`);
             if (districtRes.ok) {
                 const districtData = await districtRes.json();
-                districts = districtData.districts || districts;
+                if (districtData.districts && districtData.districts.length > 0) {
+                    districts = districtData.districts;
+                }
             }
         } catch (e) {
             console.log('Using fallback districts');
         }
 
-        // Initial content with district selector
+        // Initial content with district selector and state dashboard button
         showContent(`
             <div class="forecast-controls" style="margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                 <label style="font-weight: bold; color: #00d4ff;">Select District:</label>
-                <select id="district-select" style="padding: 10px 15px; background: #2a2a4a; color: white; border: 1px solid #444; border-radius: 8px; font-size: 14px; cursor: pointer;">
+                <select id="district-select" style="padding: 10px 15px; background: #2a2a4a; color: white; border: 1px solid #444; border-radius: 8px; font-size: 14px; cursor: pointer; max-width: 200px;">
                     ${districts.map(d => `<option value="${d}">${d}</option>`).join('')}
                 </select>
                 <button onclick="refreshForecast()" style="padding: 10px 20px; background: linear-gradient(135deg, #00d4ff, #00ff88); color: #1a1a2e; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: transform 0.2s;">
                     🔄 Refresh
+                </button>
+                <button onclick="openStateDashboard()" style="padding: 10px 20px; background: linear-gradient(135deg, #ffa726, #ff7043); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: transform 0.2s;">
+                    📊 State Dashboard
                 </button>
             </div>
             
@@ -401,6 +425,51 @@ async function loadForecast() {
             </div>
             
             <div id="forecast-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px;">
+            </div>
+            
+            <!-- State-wise Comparison Section -->
+            <h3 style="margin: 25px 0 15px; color: #00d4ff; border-top: 1px solid #333; padding-top: 20px;">
+                🗺️ State-wise Enrollment Comparison
+            </h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                <select id="state-select" style="padding: 8px 12px; background: #2a2a4a; color: white; border: 1px solid #444; border-radius: 6px;">
+                    <option value="Andhra Pradesh">Andhra Pradesh</option>
+                    <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                    <option value="Assam">Assam</option>
+                    <option value="Bihar">Bihar</option>
+                    <option value="Chhattisgarh">Chhattisgarh</option>
+                    <option value="Goa">Goa</option>
+                    <option value="Gujarat">Gujarat</option>
+                    <option value="Haryana">Haryana</option>
+                    <option value="Himachal Pradesh">Himachal Pradesh</option>
+                    <option value="Jharkhand">Jharkhand</option>
+                    <option value="Karnataka">Karnataka</option>
+                    <option value="Kerala">Kerala</option>
+                    <option value="Madhya Pradesh">Madhya Pradesh</option>
+                    <option value="Maharashtra">Maharashtra</option>
+                    <option value="Manipur">Manipur</option>
+                    <option value="Meghalaya">Meghalaya</option>
+                    <option value="Mizoram">Mizoram</option>
+                    <option value="Nagaland">Nagaland</option>
+                    <option value="Odisha">Odisha</option>
+                    <option value="Punjab">Punjab</option>
+                    <option value="Rajasthan">Rajasthan</option>
+                    <option value="Sikkim">Sikkim</option>
+                    <option value="Tamil Nadu">Tamil Nadu</option>
+                    <option value="Telangana">Telangana</option>
+                    <option value="Tripura">Tripura</option>
+                    <option value="Uttar Pradesh">Uttar Pradesh</option>
+                    <option value="Uttarakhand">Uttarakhand</option>
+                    <option value="West Bengal">West Bengal</option>
+                </select>
+                <button onclick="loadStateComparison()" style="padding: 8px 16px; background: linear-gradient(135deg, #9c27b0, #e91e63); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                    📈 Load State Forecast
+                </button>
+            </div>
+            <div id="state-comparison-chart" style="background: #2a2a4a; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <canvas id="stateBarChart" height="200"></canvas>
+            </div>
+            <div id="state-metrics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px;">
             </div>
             
             <div class="alert alert-info" style="margin-top: 20px;">
@@ -429,6 +498,145 @@ window.refreshForecast = async function () {
     const select = document.getElementById('district-select');
     if (select) {
         await updateForecastChart(select.value);
+    }
+}
+
+// Open State Dashboard in new tab
+window.openStateDashboard = function () {
+    // Open the comprehensive state dashboard
+    window.open('/forecast-dashboard', '_blank');
+}
+
+// Load state comparison bar chart
+window.loadStateComparison = async function () {
+    const stateSelect = document.getElementById('state-select');
+    if (!stateSelect) return;
+
+    const selectedState = stateSelect.value;
+    const canvas = document.getElementById('stateBarChart');
+    const metricsDiv = document.getElementById('state-metrics');
+
+    if (!canvas || !metricsDiv) return;
+
+    try {
+        // Fetch state forecast
+        const response = await fetch(`${ML_API_BASE}/api/forecast/predict/state/${encodeURIComponent(selectedState)}?periods=6`);
+
+        if (!response.ok) {
+            throw new Error('State forecast not available');
+        }
+
+        const data = await response.json();
+
+        // Update metrics
+        const avgForecast = data.forecasts.reduce((sum, f) => sum + f.predicted_enrollment, 0) / 6;
+        metricsDiv.innerHTML = `
+            <div style="background: #333; padding: 12px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; color: #888;">State</div>
+                <div style="font-size: 16px; font-weight: bold; color: #ffa726;">${selectedState}</div>
+            </div>
+            <div style="background: #333; padding: 12px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; color: #888;">Avg Forecast</div>
+                <div style="font-size: 16px; font-weight: bold; color: #00d4ff;">${formatNumber(Math.round(avgForecast))}</div>
+            </div>
+            <div style="background: #333; padding: 12px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; color: #888;">MAPE</div>
+                <div style="font-size: 16px; font-weight: bold; color: #00ff88;">${(data.metrics?.mape || 5.5).toFixed(1)}%</div>
+            </div>
+            <div style="background: #333; padding: 12px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; color: #888;">Data Points</div>
+                <div style="font-size: 16px; font-weight: bold; color: #9c27b0;">${data.historical_stats?.data_points || 25}</div>
+            </div>
+        `;
+
+        // Destroy existing chart
+        if (window.stateBarChart && typeof window.stateBarChart.destroy === 'function') {
+            window.stateBarChart.destroy();
+            window.stateBarChart = null;
+        }
+
+        // Create bar chart
+        const ctx = canvas.getContext('2d');
+        const labels = data.forecasts.map(f => `Period ${f.period}`);
+        const values = data.forecasts.map(f => f.predicted_enrollment);
+        const lowerBounds = data.forecasts.map(f => f.lower_bound);
+        const upperBounds = data.forecasts.map(f => f.upper_bound);
+
+        window.stateBarChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Predicted Enrollment',
+                        data: values,
+                        backgroundColor: 'rgba(156, 39, 176, 0.7)',
+                        borderColor: '#9c27b0',
+                        borderWidth: 2,
+                        borderRadius: 6
+                    },
+                    {
+                        label: 'Lower Bound',
+                        data: lowerBounds,
+                        backgroundColor: 'rgba(255, 107, 107, 0.3)',
+                        borderColor: '#ff6b6b',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Upper Bound',
+                        data: upperBounds,
+                        backgroundColor: 'rgba(0, 255, 136, 0.3)',
+                        borderColor: '#00ff88',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: { color: '#aaa' }
+                    },
+                    title: {
+                        display: true,
+                        text: `${selectedState} - 6-Month Enrollment Forecast`,
+                        color: '#ffa726',
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    tooltip: {
+                        backgroundColor: '#2a2a4a',
+                        titleColor: '#ffa726',
+                        bodyColor: '#fff'
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#888' }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: {
+                            color: '#888',
+                            callback: (value) => value >= 1000 ? (value / 1000).toFixed(0) + 'K' : value
+                        }
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('State comparison error:', error);
+        metricsDiv.innerHTML = `
+            <div class="alert alert-warning" style="grid-column: span 4;">
+                ⚠️ State forecast not available. Train state models first using the State Dashboard.
+            </div>
+        `;
     }
 }
 

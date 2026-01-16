@@ -79,8 +79,15 @@ app.get('/api/forecast/districts', async (req, res) => {
   } catch (error) {
     console.error('Forecast districts error:', error.message);
     res.status(503).json({
-      count: 10,
-      districts: ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow']
+      count: 30,
+      districts: [
+        'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata',
+        'Hyderabad', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow',
+        'Patna', 'Bhopal', 'Indore', 'Chandigarh', 'Thiruvananthapuram',
+        'Kochi', 'Coimbatore', 'Visakhapatnam', 'Nagpur', 'Vadodara',
+        'Surat', 'Kanpur', 'Agra', 'Varanasi', 'Bhilai',
+        'Raipur', 'Guwahati', 'Bhubaneswar', 'Ranchi', 'Dehradun'
+      ]
     });
   }
 });
@@ -164,6 +171,11 @@ app.get('/api/forecast/predict/state/:state', async (req, res) => {
     console.error('Forecast predict state error:', error.message);
     res.status(503).json({ error: 'ML Backend unavailable', message: error.message });
   }
+});
+
+// Serve ARIMA Forecast Dashboard
+app.get('/forecast-dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'forecast-dashboard.html'));
 });
 
 // Health check

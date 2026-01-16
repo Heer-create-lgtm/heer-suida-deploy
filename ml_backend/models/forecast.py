@@ -304,8 +304,8 @@ class EnrollmentForecaster:
             return False
     
     def get_available_districts(self) -> List[str]:
-        """Get list of districts with trained models."""
-        return list(self.models.keys())
+        """Get list of districts with trained models (excludes state models)."""
+        return [k for k in self.models.keys() if not k.startswith("STATE:")]
     
     def get_model_info(self) -> Dict:
         """Get summary information about trained models."""
