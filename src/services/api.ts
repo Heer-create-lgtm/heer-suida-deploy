@@ -346,6 +346,179 @@ export const forecastApi = {
     }
 };
 
+// =====================================
+// Data Fetching API (for useData hooks)
+// =====================================
+
+interface DataFetchOptions {
+    limit?: number;
+}
+
+interface DataResponse<T> {
+    records: T[];
+    total: number;
+}
+
+export async function fetchEnrolmentData(options: DataFetchOptions = {}): Promise<DataResponse<unknown>> {
+    const limit = options.limit || 1000;
+    const response = await fetchAPI<{ records: unknown[]; total: number }>(`/data/enrollment?limit=${limit}`);
+    return response.data || { records: [], total: 0 };
+}
+
+export async function fetchDemographicData(options: DataFetchOptions = {}): Promise<DataResponse<unknown>> {
+    const limit = options.limit || 1000;
+    const response = await fetchAPI<{ records: unknown[]; total: number }>(`/data/demographic?limit=${limit}`);
+    return response.data || { records: [], total: 0 };
+}
+
+export async function fetchBiometricData(options: DataFetchOptions = {}): Promise<DataResponse<unknown>> {
+    const limit = options.limit || 1000;
+    const response = await fetchAPI<{ records: unknown[]; total: number }>(`/data/biometric?limit=${limit}`);
+    return response.data || { records: [], total: 0 };
+}
+
+// =====================================
+// ML Analysis API
+// =====================================
+
+export async function fetchMLDatasets(): Promise<{ datasets: { id: string; name: string }[] }> {
+    const response = await fetchAPI<{ datasets: { id: string; name: string }[] }>('/ml/datasets');
+    return response.data || { datasets: [] };
+}
+
+export async function startMLAnalysis(datasetId: string, limit?: number): Promise<{ jobId: string }> {
+    const response = await fetchAPI<{ jobId: string }>('/ml/analyze', {
+        method: 'POST',
+        body: JSON.stringify({ datasetId, limit }),
+    });
+    return response.data || { jobId: '' };
+}
+
+export async function getAnalysisStatus(jobId: string): Promise<{ status: string; progress: number }> {
+    const response = await fetchAPI<{ status: string; progress: number }>(`/ml/status/${jobId}`);
+    return response.data || { status: 'unknown', progress: 0 };
+}
+
+export async function getAnalysisResults(jobId: string): Promise<{ anomalies: unknown[] }> {
+    const response = await fetchAPI<{ anomalies: unknown[] }>(`/ml/results/${jobId}`);
+    return response.data || { anomalies: [] };
+}
+
+export async function getAnalysisVisualizations(jobId: string): Promise<{ visualizations: unknown[] }> {
+    const response = await fetchAPI<{ visualizations: unknown[] }>(`/ml/visualizations/${jobId}`);
+    return response.data || { visualizations: [] };
+}
+
+export async function getAuditorSummary(jobId: string): Promise<{ summary: string }> {
+    const response = await fetchAPI<{ summary: string }>(`/ml/summary/${jobId}`);
+    return response.data || { summary: '' };
+}
+
+// =====================================
+// Monitoring API (Intent-based)
+// =====================================
+
+export interface MonitoringIntent {
+    id: string;
+    display_name: string;
+    description?: string;
+}
+
+export interface VigilanceLevel {
+    id: string;
+    name: string;
+    description?: string;
+}
+
+export interface MonitoringFinding {
+    title: string;
+    description: string;
+    severity: string;
+    location?: string;
+}
+
+export interface MonitoringAction {
+    action: string;
+    priority?: string;
+}
+
+export interface MonitoringResults {
+    report_id: string;
+    summary: string;
+    time_period: string;
+    analysis_scope: string;
+    records_analyzed: number;
+    flagged_for_review: number;
+    cleared: number;
+    findings: MonitoringFinding[];
+    recommended_actions: MonitoringAction[];
+    risk: {
+        risk_index: number;
+        risk_level: string;
+        confidence: string;
+    };
+    completed_at: string;
+}
+
+export interface StatusResponse {
+    job_id: string;
+    status: string;
+    progress: number;
+    message: string;
+}
+
+export async function getMonitoringIntents(): Promise<{ intents: MonitoringIntent[]; vigilance_levels: VigilanceLevel[] }> {
+    try {
+        const response = await fetch(`${ML_API_BASE}/api/monitoring/intents`);
+        if (!response.ok) throw new Error('Failed to fetch intents');
+        return await response.json();
+    } catch (error) {
+        console.error('Monitoring API Error:', error);
+        // Return fallback data
+        return {
+            intents: [
+                { id: 'comprehensive_check', display_name: 'Comprehensive Check' },
+                { id: 'fraud_detection', display_name: 'Fraud Detection' },
+                { id: 'data_quality', display_name: 'Data Quality' },
+            ],
+            vigilance_levels: [
+                { id: 'routine', name: 'Routine' },
+                { id: 'standard', name: 'Standard' },
+                { id: 'enhanced', name: 'Enhanced' },
+                { id: 'maximum', name: 'Maximum' },
+            ],
+        };
+    }
+}
+
+export async function submitMonitoringRequest(params: {
+    intent: string;
+    focus_area?: string;
+    time_period: 'today' | 'last_7_days' | 'this_month';
+    vigilance: 'routine' | 'standard' | 'enhanced' | 'maximum';
+    record_limit?: number;
+}): Promise<{ job_id: string; status: string; message: string }> {
+    const response = await fetch(`${ML_API_BASE}/api/monitoring/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+    });
+    if (!response.ok) throw new Error('Failed to submit monitoring request');
+    return await response.json();
+}
+
+export async function getMonitoringStatus(jobId: string): Promise<StatusResponse> {
+    const response = await fetch(`${ML_API_BASE}/api/monitoring/status/${jobId}`);
+    if (!response.ok) throw new Error('Failed to get monitoring status');
+    return await response.json();
+}
+
+export async function getMonitoringResults(jobId: string): Promise<MonitoringResults> {
+    const response = await fetch(`${ML_API_BASE}/api/monitoring/results/${jobId}`);
+    if (!response.ok) throw new Error('Failed to get monitoring results');
+    return await response.json();
+}
+
 export default {
     hotspot: hotspotApi,
     ai: aiApi,

@@ -55,7 +55,7 @@ const RISK_COLORS = {
     Low: '#22c55e',
     Medium: '#f59e0b',
     High: '#ef4444',
-    Critical: '#7c3aed'
+    Critical: '#FF9933'
 };
 
 export default function RiskPredictor() {
@@ -151,7 +151,7 @@ export default function RiskPredictor() {
                             onClick={runFullAnalysis}
                             disabled={loading}
                             size="lg"
-                            className="bg-gradient-to-r from-primary to-purple-600"
+                            className="bg-gradient-to-r from-primary to-accent"
                         >
                             {loading ? (
                                 <>
@@ -246,10 +246,10 @@ export default function RiskPredictor() {
 
                 {/* Model Info */}
                 {trainingResult && (
-                    <Card className="shadow-card bg-gradient-to-r from-purple-500/5 to-primary/5">
+                    <Card className="shadow-card bg-gradient-to-r from-accent/5 to-primary/5">
                         <CardContent className="p-6">
                             <div className="flex items-center gap-4">
-                                <Brain className="h-8 w-8 text-purple-500" />
+                                <Brain className="h-8 w-8 text-accent" />
                                 <div>
                                     <p className="text-lg font-semibold">Model: {trainingResult.model_type?.toUpperCase()}</p>
                                     <p className="text-sm text-muted-foreground">{trainingResult.reason}</p>
@@ -330,11 +330,11 @@ export default function RiskPredictor() {
                                         key={index}
                                         className="flex items-center gap-4 rounded-lg border border-border p-4"
                                     >
-                                        <div className={`rounded-full p-2 ${item.risk_category === 'Critical' ? 'bg-purple-500/20' :
-                                                item.risk_category === 'High' ? 'bg-destructive/20' : 'bg-warning/20'
+                                        <div className={`rounded-full p-2 ${item.risk_category === 'Critical' ? 'bg-accent/20' :
+                                            item.risk_category === 'High' ? 'bg-destructive/20' : 'bg-warning/20'
                                             }`}>
-                                            <MapPin className={`h-4 w-4 ${item.risk_category === 'Critical' ? 'text-purple-500' :
-                                                    item.risk_category === 'High' ? 'text-destructive' : 'text-warning'
+                                            <MapPin className={`h-4 w-4 ${item.risk_category === 'Critical' ? 'text-accent' :
+                                                item.risk_category === 'High' ? 'text-destructive' : 'text-warning'
                                                 }`} />
                                         </div>
                                         <div className="flex-1">
@@ -346,7 +346,7 @@ export default function RiskPredictor() {
                                         <Badge
                                             variant={item.risk_category === 'Critical' ? 'destructive' : 'secondary'}
                                             className={
-                                                item.risk_category === 'Critical' ? 'bg-purple-500' :
+                                                item.risk_category === 'Critical' ? 'bg-accent' :
                                                     item.risk_category === 'High' ? 'bg-destructive' : ''
                                             }
                                         >

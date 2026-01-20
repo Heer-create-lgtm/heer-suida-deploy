@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Download, FileText, Share2, MapPin, AlertCircle, TrendingDown, TrendingUp, RefreshCw, Flame, Snowflake, Activity, Target, Zap, Clock } from 'lucide-react';
-import { statesData, districtsData, getHotspotDistricts, formatPercentage, formatNumber } from '@/data/mockData';
+import { statesData, districtsData, formatPercentage, formatNumber } from '@/data/mockData';
 import { useGiStarScores, useAnomalies, useVelocity, useInterventions, useSpatialAnalysis } from '@/hooks/useHotspots';
 
 export default function Hotspots() {
@@ -21,8 +21,8 @@ export default function Hotspots() {
   const { data: interventionData, isLoading: interventionLoading } = useInterventions();
   const { data: spatialData, isLoading: spatialLoading } = useSpatialAnalysis();
 
-  // Fallback to mock data
-  const hotspots = getHotspotDistricts();
+  // Use mock district data as hotspots
+  const hotspots = districtsData;
 
   const filteredHotspots = selectedState === 'all'
     ? hotspots
@@ -241,10 +241,10 @@ export default function Hotspots() {
               </Card>
 
               {/* AI Insights Panel */}
-              <Card className="bg-gradient-to-br from-purple-500/5 to-transparent border-purple-500/20">
+              <Card className="bg-gradient-to-br from-accent/5 to-transparent border-accent/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Zap className="h-5 w-5 text-purple-500" />
+                    <Zap className="h-5 w-5 text-accent" />
                     AI-Powered Insights
                   </CardTitle>
                   <CardDescription>Gemini recommendations</CardDescription>

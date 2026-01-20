@@ -256,7 +256,7 @@ export default function Dashboard() {
               <CardDescription>Navigate to key features</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="default" className="w-full justify-start bg-purple-600 hover:bg-purple-700" asChild>
+              <Button variant="default" className="w-full justify-start bg-accent hover:bg-accent/90" asChild>
                 <Link to="/monitoring">
                   <Shield className="mr-2 h-4 w-4" />
                   Operations Monitoring

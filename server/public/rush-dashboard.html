@@ -8,17 +8,37 @@
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* Nationalist Dark Theme (Default) */
         :root {
-            --bg: #f8f9fa;
-            --white: #ffffff;
-            --border: #e0e0e0;
-            --accent: #1a73e8;
-            --success: #34a853;
-            --warning: #fbbc04;
+            --bg: #0d1117;
+            --bg-card: #161b22;
+            --white: #161b22;
+            --border: #30363d;
+            --accent: #FF9933;
+            --accent-hover: #e68a2e;
+            --success: #138808;
+            --warning: #FF9933;
             --danger: #ea4335;
-            --text: #202124;
-            --muted: #5f6368;
-            --shadow: 0 1px 3px rgba(60, 64, 67, 0.15);
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            --gradient-india: linear-gradient(135deg, #FF9933 0%, #ffffff 50%, #138808 100%);
+        }
+
+        /* Light Theme */
+        [data-theme="light"] {
+            --bg: #f6f8fa;
+            --bg-card: #ffffff;
+            --white: #ffffff;
+            --border: #d0d7de;
+            --accent: #FF9933;
+            --accent-hover: #e68a2e;
+            --success: #138808;
+            --warning: #FF9933;
+            --danger: #cf222e;
+            --text: #1f2328;
+            --muted: #656d76;
+            --shadow: 0 1px 3px rgba(31, 35, 40, 0.12);
         }
 
         * {
@@ -32,6 +52,7 @@
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         .header {
@@ -120,7 +141,7 @@
             font-weight: 600;
             margin-bottom: 16px;
             padding-bottom: 12px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border);
             color: var(--text);
         }
 
@@ -201,7 +222,7 @@
         .prediction-table td {
             padding: 10px 12px;
             text-align: left;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border);
         }
 
         .prediction-table th {
@@ -218,17 +239,17 @@
         }
 
         .peak-badge.high {
-            background: #fce8e6;
+            background: rgba(234, 67, 53, 0.15);
             color: var(--danger);
         }
 
         .peak-badge.medium {
-            background: #fef7e0;
-            color: #e37400;
+            background: rgba(255, 153, 51, 0.15);
+            color: var(--warning);
         }
 
         .peak-badge.low {
-            background: #e6f4ea;
+            background: rgba(19, 136, 8, 0.15);
             color: var(--success);
         }
 
@@ -236,6 +257,29 @@
             text-align: center;
             padding: 40px;
             color: var(--muted);
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            font-size: 13px;
+            color: var(--text);
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--accent);
+        }
+
+        .theme-toggle-icon {
+            font-size: 16px;
         }
 
         @media (max-width: 1200px) {
@@ -257,8 +301,14 @@
 
 <body>
     <div class="header">
-        <h1>Rush Period Analyzer</h1>
-        <span id="model-info" style="font-size: 12px; color: var(--muted);">Select a district to analyze</span>
+        <h1>🇮🇳 Rush Period Analyzer</h1>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <span id="model-info" style="font-size: 12px; color: var(--muted);">Select a district to analyze</span>
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span class="theme-toggle-icon" id="theme-icon">☀️</span>
+                <span id="theme-label">Light</span>
+            </button>
+        </div>
     </div>
 
     <div class="controls">
@@ -321,7 +371,7 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8000/api/rush';
+        const API_BASE = '/api/rush';
 
         const STATES = [
             'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -364,7 +414,36 @@
             'West Bengal': ['Bankura', 'Bardhaman', 'Birbhum', 'Darjeeling', 'Hooghly', 'Howrah', 'Kolkata', 'Murshidabad', 'Nadia', 'North 24 Parganas']
         };
 
+        // Theme toggle functionality
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+
+            if (currentTheme === 'light') {
+                html.removeAttribute('data-theme');
+                document.getElementById('theme-icon').textContent = '☀️';
+                document.getElementById('theme-label').textContent = 'Light';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                html.setAttribute('data-theme', 'light');
+                document.getElementById('theme-icon').textContent = '🌙';
+                document.getElementById('theme-label').textContent = 'Dark';
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        // Initialize theme on page load
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                document.getElementById('theme-icon').textContent = '🌙';
+                document.getElementById('theme-label').textContent = 'Dark';
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
             const stateSelect = document.getElementById('state-select');
             stateSelect.innerHTML = '<option value="">Select State</option>' +
                 STATES.map(s => `<option value="${s}">${s}</option>`).join('');

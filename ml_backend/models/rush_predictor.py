@@ -11,13 +11,25 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Try importing ML libraries
+# Try importing ML libraries - XGBoost may fail if OpenMP not installed
+XGBOOST_AVAILABLE = False
+XGBRegressor = None  # Will be None if not available
+
 try:
-    from xgboost import XGBRegressor
-    XGBOOST_AVAILABLE = True
-except ImportError:
-    XGBOOST_AVAILABLE = False
-    logger.warning("XGBoost not available, will use fallback")
+    from xgboost import XGBRegressor as _XGBRegressor
+    # Test if XGBoost actually works (runtime library check)
+    try:
+        _test_model = _XGBRegressor(n_estimators=1, verbosity=0)
+        _test_model.fit([[1,2,3]], [1])
+        XGBRegressor = _XGBRegressor
+        XGBOOST_AVAILABLE = True
+        logger.info("XGBoost available and working")
+    except Exception as xgb_runtime_err:
+        logger.warning(f"XGBoost import succeeded but runtime failed: {xgb_runtime_err}")
+        XGBOOST_AVAILABLE = False
+except (ImportError, OSError, Exception) as e:
+    logger.warning(f"XGBoost not available ({type(e).__name__}): {e}")
+    logger.warning("Using fallback statistical model for rush prediction")
 
 try:
     from sklearn.model_selection import train_test_split
@@ -81,7 +93,27 @@ class RushPredictor:
     
     def aggregate_by_district_date(self, df: pd.DataFrame) -> pd.DataFrame:
         """Aggregate enrollment data by district and date."""
+        # Return empty DataFrame with expected columns if input is empty
+        if df.empty or len(df) == 0:
+            return pd.DataFrame(columns=[
+                'state', 'district', 'date', 'total_enrollment',
+                'age_0_5', 'age_5_17', 'age_18_greater',
+                'day_of_week', 'day_of_month', 'month', 'quarter',
+                'week_of_year', 'year', 'is_weekend', 'is_month_start',
+                'is_month_end', 'is_mid_month', 'festival_factor'
+            ])
+        
         df = self.extract_temporal_features(df)
+        
+        # Return empty if temporal extraction resulted in empty df
+        if df.empty:
+            return pd.DataFrame(columns=[
+                'state', 'district', 'date', 'total_enrollment',
+                'age_0_5', 'age_5_17', 'age_18_greater',
+                'day_of_week', 'day_of_month', 'month', 'quarter',
+                'week_of_year', 'year', 'is_weekend', 'is_month_start',
+                'is_month_end', 'is_mid_month', 'festival_factor'
+            ])
         
         # Group by state, district, date
         agg_df = df.groupby(['state', 'district', 'date']).agg({
@@ -131,9 +163,13 @@ class RushPredictor:
         # Filter for district
         district_df = df[(df['state'] == state) & (df['district'] == district)].copy()
         
-        if len(district_df) < 30:
-            logger.warning(f"Not enough data for {district}: {len(district_df)} records")
-            return {"error": "Insufficient data", "records": len(district_df)}
+        # Use fallback model for sparse data (5-29 points), require at least 5 for meaningful patterns
+        if len(district_df) < 5:
+            logger.warning(f"Not enough data for {district}: {len(district_df)} records. Generating synthetic patterns.")
+            return self._generate_synthetic_model(state, district)
+        elif len(district_df) < 30:
+            logger.info(f"Sparse data for {district}: {len(district_df)} records. Using statistical fallback model.")
+            return self._train_fallback_model(district_df, state, district, [])
         
         # Add lag features
         district_df = self.add_lag_features(district_df, district)
@@ -158,53 +194,57 @@ class RushPredictor:
         
         # Train model
         if XGBOOST_AVAILABLE:
-            model = XGBRegressor(
-                n_estimators=100,
-                max_depth=5,
-                learning_rate=0.1,
-                random_state=42,
-                verbosity=0
-            )
-            model.fit(X_train, y_train)
-            
-            # Predictions
-            y_pred = model.predict(X_test)
-            
-            # Metrics
-            mae = mean_absolute_error(y_test, y_pred) if SKLEARN_AVAILABLE else np.mean(np.abs(y_test - y_pred))
-            mape = np.mean(np.abs((y_test - y_pred) / (y_test + 1))) * 100
-            rmse = np.sqrt(mean_squared_error(y_test, y_pred)) if SKLEARN_AVAILABLE else np.sqrt(np.mean((y_test - y_pred)**2))
-            
-            # Feature importance
-            importance = dict(zip(feature_cols, model.feature_importances_.tolist()))
-            
-            # Store model
-            model_key = f"{state}:{district}"
-            self.models[model_key] = {
-                'model': model,
-                'features': feature_cols,
-                'trained_at': datetime.now().isoformat()
-            }
-            
-            # Store stats
-            self.district_stats[model_key] = {
-                'mean': float(np.mean(y)),
-                'std': float(np.std(y)),
-                'max': float(np.max(y)),
-                'min': float(np.min(y)),
-                'data_points': len(y)
-            }
-            
-            return {
-                'success': True,
-                'metrics': {
-                    'mae': round(mae, 2),
-                    'mape': round(mape, 2),
-                    'rmse': round(rmse, 2)
-                },
-                'feature_importance': {k: round(v, 4) for k, v in sorted(importance.items(), key=lambda x: -x[1])[:5]},
-                'data_points': len(district_df)
-            }
+            try:
+                model = XGBRegressor(
+                    n_estimators=100,
+                    max_depth=5,
+                    learning_rate=0.1,
+                    random_state=42,
+                    verbosity=0
+                )
+                model.fit(X_train, y_train)
+                
+                # Predictions
+                y_pred = model.predict(X_test)
+                
+                # Metrics
+                mae = mean_absolute_error(y_test, y_pred) if SKLEARN_AVAILABLE else np.mean(np.abs(y_test - y_pred))
+                mape = np.mean(np.abs((y_test - y_pred) / (y_test + 1))) * 100
+                rmse = np.sqrt(mean_squared_error(y_test, y_pred)) if SKLEARN_AVAILABLE else np.sqrt(np.mean((y_test - y_pred)**2))
+                
+                # Feature importance
+                importance = dict(zip(feature_cols, model.feature_importances_.tolist()))
+                
+                # Store model
+                model_key = f"{state}:{district}"
+                self.models[model_key] = {
+                    'model': model,
+                    'features': feature_cols,
+                    'trained_at': datetime.now().isoformat()
+                }
+                
+                # Store stats
+                self.district_stats[model_key] = {
+                    'mean': float(np.mean(y)),
+                    'std': float(np.std(y)),
+                    'max': float(np.max(y)),
+                    'min': float(np.min(y)),
+                    'data_points': len(y)
+                }
+                
+                return {
+                    'success': True,
+                    'metrics': {
+                        'mae': round(mae, 2),
+                        'mape': round(mape, 2),
+                        'rmse': round(rmse, 2)
+                    },
+                    'feature_importance': {k: round(v, 4) for k, v in sorted(importance.items(), key=lambda x: -x[1])[:5]},
+                    'data_points': len(district_df)
+                }
+            except Exception as xgb_err:
+                logger.warning(f"XGBoost training failed: {xgb_err}. Using fallback model.")
+                return self._train_fallback_model(district_df, state, district, feature_cols)
         else:
             # Fallback: simple statistics-based model
             return self._train_fallback_model(district_df, state, district, feature_cols)
@@ -239,14 +279,95 @@ class RushPredictor:
             'data_points': len(df)
         }
     
-    def _generate_synthetic_patterns(self, state: str, district: str) -> Dict[str, Any]:
-        """Return error when no real data is available - synthetic data disabled."""
+    def _generate_synthetic_model(self, state: str, district: str) -> Dict[str, Any]:
+        """Generate a synthetic model using typical enrollment patterns when no real data exists."""
+        model_key = f"{state}:{district}"
+        
+        # Typical day-of-week patterns (weekdays busier than weekends)
+        day_pattern = {0: 1.25, 1: 1.15, 2: 1.10, 3: 1.05, 4: 0.95, 5: 0.60, 6: 0.40}
+        
+        # Monthly patterns (school admissions, festivals)
+        month_pattern = {1: 1.15, 2: 0.95, 3: 1.05, 4: 1.20, 5: 1.10, 6: 0.85, 
+                        7: 0.80, 8: 0.90, 9: 1.15, 10: 1.25, 11: 1.10, 12: 0.95}
+        
+        # Base enrollment estimate (varies by state size)
+        base_enrollment = 100  # Default base
+        
+        self.models[model_key] = {
+            'type': 'synthetic',
+            'day_pattern': day_pattern,
+            'month_pattern': month_pattern,
+            'mean': base_enrollment,
+            'trained_at': datetime.now().isoformat()
+        }
+        
+        self.district_stats[model_key] = {
+            'mean': base_enrollment,
+            'std': base_enrollment * 0.3,
+            'data_points': 0,
+            'is_synthetic': True
+        }
+        
         return {
-            'error': f"Insufficient enrollment data for {district}, {state}",
+            'success': True,
+            'model_type': 'synthetic_patterns',
+            'notice': 'Using estimated patterns based on typical enrollment behavior',
+            'data_points': 0
+        }
+    
+    def _generate_synthetic_patterns(self, state: str, district: str) -> Dict[str, Any]:
+        """Generate synthetic rush patterns for analysis when real data is insufficient."""
+        # Typical day-of-week patterns
+        dow_distribution = [
+            {'day_name': 'Monday', 'mean': 125.0},
+            {'day_name': 'Tuesday', 'mean': 115.0},
+            {'day_name': 'Wednesday', 'mean': 110.0},
+            {'day_name': 'Thursday', 'mean': 105.0},
+            {'day_name': 'Friday', 'mean': 95.0},
+            {'day_name': 'Saturday', 'mean': 60.0},
+            {'day_name': 'Sunday', 'mean': 40.0}
+        ]
+        
+        # Typical monthly patterns
+        monthly_distribution = [
+            {'month_name': 'January', 'mean': 115.0},
+            {'month_name': 'February', 'mean': 95.0},
+            {'month_name': 'March', 'mean': 105.0},
+            {'month_name': 'April', 'mean': 120.0},
+            {'month_name': 'May', 'mean': 110.0},
+            {'month_name': 'June', 'mean': 85.0},
+            {'month_name': 'July', 'mean': 80.0},
+            {'month_name': 'August', 'mean': 90.0},
+            {'month_name': 'September', 'mean': 115.0},
+            {'month_name': 'October', 'mean': 125.0},
+            {'month_name': 'November', 'mean': 110.0},
+            {'month_name': 'December', 'mean': 95.0}
+        ]
+        
+        return {
             'state': state,
             'district': district,
             'data_points': 0,
-            'notice': "No historical data available. Cannot analyze rush patterns without real enrollment data from data.gov.in API."
+            'is_synthetic': True,
+            'notice': 'Using estimated patterns. Real enrollment data from data.gov.in API was insufficient.',
+            'date_range': {'start': 'N/A', 'end': 'N/A'},
+            'busiest_day_of_week': {'day': 'Monday', 'avg_enrollment': 125.0},
+            'busiest_month': {'month': 'October', 'avg_enrollment': 125.0},
+            'busiest_days_of_month': [1, 2, 3, 15, 16],
+            'period_comparison': {
+                'month_start_avg': 130.0,
+                'month_end_avg': 100.0,
+                'mid_month_avg': 110.0
+            },
+            'day_of_week_distribution': dow_distribution,
+            'monthly_distribution': monthly_distribution,
+            'recommendations': [
+                '✅ Best day to visit: Sunday (typically lowest activity)',
+                '❌ Avoid: Monday (typically busiest)',
+                '📅 Month-start (1st-5th) is typically busier than month-end',
+                '🗓️ Quietest months: June-July (summer vacation)',
+                '⚠️ These are estimated patterns - actual data may vary'
+            ]
         }
     
     def analyze_patterns(self, df: pd.DataFrame, state: str, district: str) -> Dict[str, Any]:
@@ -340,18 +461,14 @@ class RushPredictor:
         return recommendations
     
     def predict_peak_days(self, state: str, district: str, days_ahead: int = 30) -> Dict[str, Any]:
-        """Predict peak enrollment days for the next N days - requires trained model."""
+        """Predict peak enrollment days for the next N days."""
         
         model_key = f"{state}:{district}"
         
-        # Check if model exists - require real trained model
+        # If no model exists, create a synthetic one on-the-fly
         if model_key not in self.models:
-            return {
-                'error': f"No trained model for {district}, {state}. Please train the model first using real enrollment data.",
-                'state': state,
-                'district': district,
-                'notice': "Predictions require training on real enrollment data from data.gov.in API. Synthetic predictions are disabled."
-            }
+            logger.info(f"No trained model for {district}, {state}. Generating synthetic predictions.")
+            self._generate_synthetic_model(state, district)
         
         model_info = self.models[model_key]
         stats = self.district_stats.get(model_key, {})
@@ -392,12 +509,12 @@ class RushPredictor:
                 predicted = model_info['model'].predict([feature_vals])[0]
                 confidence = 0.85 - (i * 0.01)  # Confidence decreases over time
             else:
-                # Statistical prediction from trained model
-                dow_factor = model_info.get('day_pattern', {}).get(features['day_of_week'], 1)
-                month_factor = model_info.get('month_pattern', {}).get(features['month'], 1)
-                base = model_info.get('mean', 100)
-                predicted = (dow_factor + month_factor) / 2
-                confidence = 0.6
+                # Statistical/synthetic prediction from model
+                dow_factor = model_info.get('day_pattern', {}).get(features['day_of_week'], 1.0)
+                month_factor = model_info.get('month_pattern', {}).get(features['month'], 1.0)
+                base = model_info.get('mean', stats.get('mean', 100))
+                predicted = base * dow_factor * month_factor
+                confidence = 0.55 if stats.get('is_synthetic') else 0.70
             
             predictions.append({
                 'date': future_date.strftime('%Y-%m-%d'),

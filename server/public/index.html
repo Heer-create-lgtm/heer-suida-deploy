@@ -9,11 +9,17 @@
 </head>
 
 <body>
+    <!-- Theme Toggle -->
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <span class="theme-toggle-icon" id="theme-icon">☀️</span>
+        <span id="theme-label">Light</span>
+    </button>
+
     <div class="container">
         <!-- Header -->
         <header class="header">
             <div class="logo">
-                <span class="logo-icon">🆔</span>
+                <span class="logo-icon">🇮🇳</span>
                 <h1>UIDAI Analytics Dashboard</h1>
             </div>
             <p class="subtitle">Aadhaar Data Intelligence Platform</p>
@@ -71,11 +77,40 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>UIDAI Data Hackathon 2026 | Built with ❤️ for Digital India</p>
+            <p>UIDAI Data Hackathon 2026 | Built with ❤️ for Digital India 🇮🇳</p>
         </footer>
     </div>
 
     <script>
+        // Theme toggle functionality
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? null : 'light';
+
+            if (newTheme) {
+                html.setAttribute('data-theme', 'light');
+                document.getElementById('theme-icon').textContent = '🌙';
+                document.getElementById('theme-label').textContent = 'Dark';
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.removeAttribute('data-theme');
+                document.getElementById('theme-icon').textContent = '☀️';
+                document.getElementById('theme-label').textContent = 'Light';
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        // Load saved theme
+        document.addEventListener('DOMContentLoaded', function () {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                document.getElementById('theme-icon').textContent = '🌙';
+                document.getElementById('theme-label').textContent = 'Dark';
+            }
+        });
+
         // Check backend status
         async function checkStatus() {
             const API_BASE = 'http://localhost:3001/api';

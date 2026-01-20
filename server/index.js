@@ -157,6 +157,19 @@ app.get('/api/forecast/predict/state/:state', async (req, res) => {
   }
 });
 
+app.get('/api/forecast/diagnostics/:state', async (req, res) => {
+  try {
+    const { state } = req.params;
+    const response = await axios.get(
+      `${ML_BACKEND_URL}/api/forecast/diagnostics/${encodeURIComponent(state)}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error('Forecast diagnostics error:', error.message);
+    res.status(503).json({ error: 'ML Backend unavailable', message: error.message });
+  }
+});
+
 // Serve ARIMA Forecast Dashboard
 app.get('/forecast-dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'forecast-dashboard.html'));
@@ -206,6 +219,19 @@ app.get('/api/rush/predict/:state/:district', async (req, res) => {
     res.json(response.data);
   } catch (error) {
     res.status(503).json({ error: error.message });
+  }
+});
+
+app.post('/api/rush/train/:state/:district', async (req, res) => {
+  try {
+    const limit = req.query.limit || 5000;
+    const response = await axios.post(
+      `${ML_BACKEND_URL}/api/rush/train/${encodeURIComponent(req.params.state)}/${encodeURIComponent(req.params.district)}?limit=${limit}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error('Rush train error:', error.message);
+    res.status(503).json({ error: error.message, success: false });
   }
 });
 

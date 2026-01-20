@@ -213,7 +213,7 @@ export default function SpatialIntelligence() {
                 {/* Stats Cards - Updated with new classifications */}
                 <div className="grid gap-4 md:grid-cols-5">
                     {/* Total Districts */}
-                    <Card className="border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-500/5 to-transparent">
+                    <Card className="border-l-4 border-l-primary bg-gradient-to-br from-primary/5 to-transparent">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                 <Globe className="h-4 w-4" />

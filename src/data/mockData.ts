@@ -44,6 +44,27 @@ export const statesData: StateData[] = [
     { id: '6', name: 'Karnataka', code: 'KA', enrollmentCoverage: 96.5, totalPopulation: 61095297, enrolledPopulation: 58956961, maleEnrolled: 30067048, femaleEnrolled: 28889913, genderGap: 2.0, activeCenters: 7654, pendingUpdates: 76543, riskScore: 0.11, region: 'south' },
 ];
 
+// District data for hotspot detection
+export interface DistrictHotspot {
+    id: string;
+    name: string;
+    stateId: string;
+    stateName: string;
+    enrollmentCoverage: number;
+    riskScore: number;
+}
+
+export const districtsData: DistrictHotspot[] = [
+    { id: 'd1', name: 'Kishanganj', stateId: '3', stateName: 'Bihar', enrollmentCoverage: 74.8, riskScore: 4.5 },
+    { id: 'd2', name: 'Araria', stateId: '3', stateName: 'Bihar', enrollmentCoverage: 76.2, riskScore: 4.2 },
+    { id: 'd3', name: 'Purnia', stateId: '3', stateName: 'Bihar', enrollmentCoverage: 78.5, riskScore: 3.8 },
+    { id: 'd4', name: 'Katihar', stateId: '3', stateName: 'Bihar', enrollmentCoverage: 79.1, riskScore: 3.6 },
+    { id: 'd5', name: 'Shravasti', stateId: '2', stateName: 'Uttar Pradesh', enrollmentCoverage: 72.1, riskScore: 4.8 },
+    { id: 'd6', name: 'Bahraich', stateId: '2', stateName: 'Uttar Pradesh', enrollmentCoverage: 75.3, riskScore: 4.1 },
+    { id: 'd7', name: 'Sitamarhi', stateId: '3', stateName: 'Bihar', enrollmentCoverage: 77.8, riskScore: 3.9 },
+    { id: 'd8', name: 'Madhepura', stateId: '3', stateName: 'Bihar', enrollmentCoverage: 79.5, riskScore: 3.5 },
+];
+
 export const anomalyAlerts: AnomalyAlert[] = [
     { id: '1', type: 'spike', severity: 'high', location: 'Bihar, Patna', description: 'Unusual enrollment spike detected', timestamp: '2024-01-15T10:30:00Z', status: 'investigating' },
     { id: '2', type: 'drop', severity: 'critical', location: 'Jharkhand, Ranchi', description: 'Significant drop in biometric updates', timestamp: '2024-01-15T09:15:00Z', status: 'active' },
