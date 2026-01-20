@@ -485,20 +485,33 @@
                 const res = await fetch(`${API_BASE}/predict-all-states?periods=6`);
                 if (res.ok) {
                     allStatesData = await res.json();
+                    console.log('Loaded forecast data for', allStatesData?.states?.length || 0, 'states');
                     document.getElementById('model-version').textContent = allStatesData.model_version || 'v2.0.0';
+                } else {
+                    console.warn('Failed to load forecast data:', res.status);
                 }
-            } catch (e) { console.log('Using synthetic data'); }
+            } catch (e) {
+                console.warn('Error loading forecast data:', e.message);
+            }
         }
 
         async function trainModels() {
             try {
                 document.body.style.cursor = 'wait';
-                const res = await fetch(`${API_BASE}/train/states`, { method: 'POST' });
+                const res = await fetch(`${API_BASE}/train/states?limit=5000`, { method: 'POST' });
                 const data = await res.json();
-                alert(`✅ Training Complete!\n\nStates: ${data.trained_count}\nMAPE: ${data.metrics.avg_mape}%`);
+
+                if (!res.ok) {
+                    alert(`❌ Training Failed\n\n${data.detail || 'Unknown error'}`);
+                    return;
+                }
+
+                alert(`✅ Training Complete!\n\nStates: ${data.trained_count}\nAvg MAPE: ${data.metrics?.avg_mape?.toFixed(1) || 'N/A'}%`);
                 await loadAllStatesData();
                 updateDashboard();
-            } catch (e) { alert('Training failed.'); }
+            } catch (e) {
+                alert(`❌ Training Error\n\n${e.message}`);
+            }
             finally { document.body.style.cursor = 'default'; }
         }
 
@@ -531,11 +544,15 @@
                     states.push(s.state);
                 });
             } else {
-                INDIAN_STATES.forEach(s => { values.push(Math.random() * 150000 + 50000); states.push(s); });
+                // No data available - show message instead of fake data
+                document.getElementById('geo-chart').innerHTML = '<p style="text-align: center; color: #e37400; padding: 50px;">⚠️ No forecast data available. Please train models first.</p>';
+                return;
             }
 
             const sorted = states.map((s, i) => ({ state: s, value: values[i] })).sort((a, b) => b.value - a.value);
 
+            // Clear any error message before plotting
+            document.getElementById('geo-chart').innerHTML = '';
             Plotly.newPlot('geo-chart', [{
                 type: 'bar', orientation: 'h',
                 y: sorted.map(s => s.state), x: sorted.map(s => s.value),
@@ -557,53 +574,97 @@
             if (data) {
                 const avg = data.forecasts.reduce((sum, f) => sum + f.predicted_enrollment, 0) / 6;
                 document.getElementById('metric-forecast').textContent = formatNumber(Math.round(avg));
-                document.getElementById('metric-mape').textContent = (data.metrics?.mape || 5.5).toFixed(1) + '%';
-                document.getElementById('metric-mae').textContent = formatNumber(Math.round(data.metrics?.mae || 1800));
-                document.getElementById('metric-rmse').textContent = formatNumber(Math.round(data.metrics?.rmse || 6200));
-                document.getElementById('data-points').textContent = data.historical_stats?.data_points || 25;
+
+                // MAPE: cap at 99% for display, show >99% for poor models
+                const mape = data.metrics?.mape;
+                if (mape !== undefined) {
+                    if (mape > 99) {
+                        document.getElementById('metric-mape').textContent = '>99%';
+                        document.getElementById('metric-mape').style.color = '#ea4335'; // Red for poor accuracy
+                    } else if (mape > 30) {
+                        document.getElementById('metric-mape').textContent = mape.toFixed(1) + '%';
+                        document.getElementById('metric-mape').style.color = '#e37400'; // Orange for fair accuracy
+                    } else {
+                        document.getElementById('metric-mape').textContent = mape.toFixed(1) + '%';
+                        document.getElementById('metric-mape').style.color = '#34a853'; // Green for good accuracy
+                    }
+                } else {
+                    document.getElementById('metric-mape').textContent = 'N/A';
+                    document.getElementById('metric-mape').style.color = '#5f6368';
+                }
+
+                document.getElementById('metric-mae').textContent = data.metrics?.mae ? formatNumber(Math.round(data.metrics.mae)) : 'N/A';
+                document.getElementById('metric-rmse').textContent = data.metrics?.rmse ? formatNumber(Math.round(data.metrics.rmse)) : 'N/A';
+
+                // Data points: warn if too low
+                const dataPoints = data.historical_stats?.data_points;
+                if (dataPoints) {
+                    document.getElementById('data-points').textContent = dataPoints;
+                    document.getElementById('data-points').style.color = dataPoints < 10 ? '#e37400' : '#34a853';
+                } else {
+                    document.getElementById('data-points').textContent = 'N/A';
+                    document.getElementById('data-points').style.color = '#5f6368';
+                }
             } else {
-                document.getElementById('metric-forecast').textContent = '120K';
-                document.getElementById('metric-mape').textContent = '5.5%';
-                document.getElementById('metric-mae').textContent = '1.8K';
-                document.getElementById('metric-rmse').textContent = '6.2K';
-                document.getElementById('data-points').textContent = '25';
+                // No data - show N/A instead of fake values
+                document.getElementById('metric-forecast').textContent = 'N/A';
+                document.getElementById('metric-mape').textContent = 'N/A';
+                document.getElementById('metric-mape').style.color = '#5f6368';
+                document.getElementById('metric-mae').textContent = 'N/A';
+                document.getElementById('metric-rmse').textContent = 'N/A';
+                document.getElementById('data-points').textContent = 'N/A';
+                document.getElementById('data-points').style.color = '#5f6368';
             }
         }
 
         function updateTimeseries(state) {
             const data = getStateData(state);
-            const mean = data?.historical_stats?.mean || 100000;
-            const std = data?.historical_stats?.std || 15000;
-            const seed = state.charCodeAt(0) + state.length;
 
-            let historical = [], forecast = [], upper = [], lower = [];
-
-            for (let i = 0; i < 6; i++) {
-                const val = mean - std * 0.3 + i * std * 0.08 + Math.sin((i + seed) * 0.8) * std * 0.15;
-                historical.push(Math.max(val, mean * 0.7));
-                forecast.push(null); upper.push(null); lower.push(null);
+            // Require real data - no synthetic generation
+            if (!data?.forecasts || !data?.historical_stats) {
+                document.getElementById('timeseries-chart').innerHTML = `
+                    <div style="text-align: center; color: #e37400; padding: 60px;">
+                        <p>⚠️ No forecast data available for ${state}</p>
+                        <p style="font-size: 12px; color: #5f6368;">Train models first to see time series chart</p>
+                    </div>
+                `;
+                return;
             }
 
-            if (data?.forecasts) {
-                data.forecasts.forEach(f => {
-                    historical.push(null);
-                    forecast.push(f.predicted_enrollment);
-                    upper.push(f.upper_bound);
-                    lower.push(f.lower_bound);
-                });
+            const mean = data.historical_stats.mean;
+            const std = data.historical_stats.std || mean * 0.1;
+
+            // Use real historical data if available, otherwise show only forecasts
+            let historical = [], forecast = [], upper = [], lower = [];
+            const labels = [];
+
+            // Historical data (H6 to H1) - only if we have real historical
+            if (data.historical_values && data.historical_values.length > 0) {
+                for (let i = 0; i < Math.min(6, data.historical_values.length); i++) {
+                    historical.push(data.historical_values[i]);
+                    forecast.push(null); upper.push(null); lower.push(null);
+                    labels.push(`H${6 - i}`);
+                }
             } else {
-                let last = historical[5];
+                // No historical data - leave empty
                 for (let i = 0; i < 6; i++) {
                     historical.push(null);
-                    const v = last * (1 + 0.015 * (i + 1));
-                    forecast.push(Math.round(v));
-                    upper.push(Math.round(v * 1.03 + i * 500));
-                    lower.push(Math.round(v * 0.97 - i * 500));
+                    forecast.push(null); upper.push(null); lower.push(null);
+                    labels.push(`H${6 - i}`);
                 }
             }
 
-            const labels = ['H6', 'H5', 'H4', 'H3', 'H2', 'H1', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6'];
+            // Forecast data (F1 to F6) - use real forecasts
+            data.forecasts.forEach((f, i) => {
+                historical.push(null);
+                forecast.push(f.predicted_enrollment);
+                upper.push(f.upper_bound);
+                lower.push(f.lower_bound);
+                labels.push(`F${i + 1}`);
+            });
 
+            // Clear any error message before plotting
+            document.getElementById('timeseries-chart').innerHTML = '';
             Plotly.newPlot('timeseries-chart', [
                 { x: labels, y: upper, type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false },
                 { x: labels, y: lower, type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(52, 168, 83, 0.15)', line: { width: 0 }, showlegend: false },
@@ -622,7 +683,19 @@
 
         function updateScenarios(state) {
             const data = getStateData(state);
-            const avg = data ? data.forecasts.reduce((sum, f) => sum + f.predicted_enrollment, 0) / 6 : 120000;
+
+            if (!data || !data.forecasts) {
+                // No data - show N/A instead of fake values
+                document.getElementById('bar-pessimistic').style.width = '0%';
+                document.getElementById('bar-baseline').style.width = '0%';
+                document.getElementById('bar-optimistic').style.width = '0%';
+                document.getElementById('val-pessimistic').textContent = 'N/A';
+                document.getElementById('val-baseline').textContent = 'N/A';
+                document.getElementById('val-optimistic').textContent = 'N/A';
+                return;
+            }
+
+            const avg = data.forecasts.reduce((sum, f) => sum + f.predicted_enrollment, 0) / 6;
             const pess = avg * 0.9, base = avg, opt = avg * 1.1;
 
             document.getElementById('bar-pessimistic').style.width = `${pess / opt * 100}%`;
@@ -634,28 +707,52 @@
             document.getElementById('val-optimistic').textContent = formatNumber(Math.round(opt));
         }
 
-        function updateDiagnostics() {
-            const residuals = Array.from({ length: 30 }, () => (Math.random() - 0.5) * 3000);
-            const acf = Array.from({ length: 15 }, (_, i) => Math.exp(-i * 0.3) * (Math.random() > 0.5 ? 1 : -1) * 0.8);
+        async function updateDiagnostics() {
+            const state = document.getElementById('state-select').value;
 
-            Plotly.newPlot('diagnostics-chart', [
-                { x: Array.from({ length: 30 }, (_, i) => i + 1), y: residuals, type: 'scatter', mode: 'lines+markers', line: { color: '#e37400', width: 1.5 }, marker: { size: 4 }, xaxis: 'x', yaxis: 'y' },
-                { x: Array.from({ length: 15 }, (_, i) => i), y: acf, type: 'bar', marker: { color: acf.map(v => v > 0 ? '#1a73e8' : '#ea4335') }, xaxis: 'x2', yaxis: 'y2' }
-            ], {
-                grid: { rows: 1, columns: 2, pattern: 'independent' },
-                margin: { l: 55, r: 20, t: 25, b: 45 },
-                paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-                font: { color: '#5f6368' },
-                xaxis: { title: 'Observation', gridcolor: '#eee', domain: [0, 0.48] },
-                yaxis: { title: 'Residual', gridcolor: '#eee', zeroline: true, zerolinecolor: '#ea4335' },
-                xaxis2: { title: 'Lag', gridcolor: '#eee', domain: [0.52, 1] },
-                yaxis2: { title: 'ACF', gridcolor: '#eee', range: [-1, 1], anchor: 'x2' },
-                showlegend: false,
-                annotations: [
-                    { x: 0.24, y: 1.1, xref: 'paper', yref: 'paper', text: 'Residual Plot', showarrow: false, font: { size: 12, color: '#e37400' } },
-                    { x: 0.76, y: 1.1, xref: 'paper', yref: 'paper', text: 'Autocorrelation', showarrow: false, font: { size: 12, color: '#1a73e8' } }
-                ]
-            }, { responsive: true, displayModeBar: false });
+            try {
+                // Fetch real diagnostics from ML backend
+                const res = await fetch(`${API_BASE}/diagnostics/${encodeURIComponent(state)}`);
+
+                if (!res.ok) {
+                    throw new Error('Diagnostics not available');
+                }
+
+                const data = await res.json();
+                const residuals = data.residuals || [];
+                const acf = data.acf_values || [];
+
+                // Clear any error message before plotting
+                document.getElementById('diagnostics-chart').innerHTML = '';
+                Plotly.newPlot('diagnostics-chart', [
+                    { x: Array.from({ length: residuals.length }, (_, i) => i + 1), y: residuals, type: 'scatter', mode: 'lines+markers', line: { color: '#e37400', width: 1.5 }, marker: { size: 4 }, xaxis: 'x', yaxis: 'y', name: 'Residuals' },
+                    { x: Array.from({ length: acf.length }, (_, i) => i), y: acf, type: 'bar', marker: { color: acf.map(v => v > 0 ? '#1a73e8' : '#ea4335') }, xaxis: 'x2', yaxis: 'y2', name: 'ACF' }
+                ], {
+                    grid: { rows: 1, columns: 2, pattern: 'independent' },
+                    margin: { l: 55, r: 20, t: 25, b: 45 },
+                    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+                    font: { color: '#5f6368' },
+                    xaxis: { title: 'Observation', gridcolor: '#eee', domain: [0, 0.48] },
+                    yaxis: { title: 'Residual', gridcolor: '#eee', zeroline: true, zerolinecolor: '#ea4335' },
+                    xaxis2: { title: 'Lag', gridcolor: '#eee', domain: [0.52, 1] },
+                    yaxis2: { title: 'ACF', gridcolor: '#eee', range: [-1, 1], anchor: 'x2' },
+                    showlegend: false,
+                    annotations: [
+                        { x: 0.24, y: 1.1, xref: 'paper', yref: 'paper', text: `Residual Plot (Mean: ${data.residual_stats?.mean?.toFixed(0) || 0})`, showarrow: false, font: { size: 12, color: '#e37400' } },
+                        { x: 0.76, y: 1.1, xref: 'paper', yref: 'paper', text: `ACF (Ljung-Box p: ${data.ljung_box_pvalue?.toFixed(3) || 'N/A'})`, showarrow: false, font: { size: 12, color: '#1a73e8' } }
+                    ]
+                }, { responsive: true, displayModeBar: false });
+
+            } catch (e) {
+                console.log('Diagnostics fetch failed:', e.message);
+                // Show error message instead of synthetic data
+                document.getElementById('diagnostics-chart').innerHTML = `
+                    <div style="text-align: center; color: #e37400; padding: 40px;">
+                        <p>⚠️ Cannot display diagnostics</p>
+                        <p style="font-size: 12px; color: #5f6368;">${e.message || 'No model trained for selected state'}</p>
+                    </div>
+                `;
+            }
         }
 
         document.addEventListener('DOMContentLoaded', init);

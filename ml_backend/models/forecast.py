@@ -372,7 +372,7 @@ class EnrollmentForecaster:
             daily_enrollments = state_df.groupby('date')['total_enrollment'].sum()
             daily_enrollments = daily_enrollments.sort_index()
             
-            if len(daily_enrollments) >= 10:
+            if len(daily_enrollments) >= 5:
                 state_series[str(state)] = daily_enrollments
                 logger.debug(f"Prepared state series for {state}: {len(daily_enrollments)} points")
         

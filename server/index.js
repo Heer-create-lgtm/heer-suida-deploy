@@ -11,14 +11,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Import routes
-import enrolmentRoutes from './routes/enrolment.js';
-import demographicRoutes from './routes/demographic.js';
-import biometricRoutes from './routes/biometric.js';
-import dashboardRoutes from './routes/dashboard.js';
-import aiRoutes from './routes/ai.js';
-import hotspotsRoutes from './routes/hotspots.js';
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 const ML_BACKEND_URL = process.env.ML_BACKEND_URL || 'http://localhost:8000';
@@ -29,14 +21,6 @@ app.use(express.json());
 
 // Serve static files from public folder
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Routes
-app.use('/api/enrolment', enrolmentRoutes);
-app.use('/api/demographic', demographicRoutes);
-app.use('/api/biometric', biometricRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/hotspots', hotspotsRoutes);
 
 // ML Backend Proxy - Forward requests to Python FastAPI ML backend
 app.use('/api/ml', async (req, res) => {
@@ -241,9 +225,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 UIDAI Backend Server running on http://localhost:${PORT}`);
-  console.log(`📊 Dashboard API: http://localhost:${PORT}/api/dashboard`);
-  console.log(`🤖 AI API: http://localhost:${PORT}/api/ai`);
   console.log(`🧠 ML API (proxied): http://localhost:${PORT}/api/ml → ${ML_BACKEND_URL}`);
-  console.log(`🗺️  Hotspots API: http://localhost:${PORT}/api/hotspots`);
-  console.log(`📈 Spatial Analysis: http://localhost:${PORT}/api/hotspots/spatial`);
+  console.log(`📅 Forecast Dashboard: http://localhost:${PORT}/forecast-dashboard`);
+  console.log(`🗓️  Rush Dashboard: http://localhost:${PORT}/rush-dashboard`);
 });

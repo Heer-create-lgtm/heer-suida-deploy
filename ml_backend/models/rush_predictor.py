@@ -240,134 +240,13 @@ class RushPredictor:
         }
     
     def _generate_synthetic_patterns(self, state: str, district: str) -> Dict[str, Any]:
-        """Generate synthetic rush patterns when no real data is available."""
-        import random
-        
-        # Seed based on district name for consistency
-        seed_val = sum(ord(c) for c in f"{state}{district}")
-        random.seed(seed_val)
-        np.random.seed(seed_val % (2**32))
-        
-        # Base enrollment (varies by state tier)
-        tier1_states = ['Maharashtra', 'Uttar Pradesh', 'Bihar', 'West Bengal', 'Tamil Nadu', 'Karnataka', 'Gujarat', 'Rajasthan']
-        tier2_states = ['Andhra Pradesh', 'Telangana', 'Madhya Pradesh', 'Kerala', 'Punjab', 'Haryana', 'Jharkhand', 'Odisha']
-        
-        if state in tier1_states:
-            base_enrollment = random.randint(800, 2000)
-        elif state in tier2_states:
-            base_enrollment = random.randint(400, 900)
-        else:
-            base_enrollment = random.randint(150, 500)
-        
-        # Day of week patterns (Monday heavier, Sunday lightest)
-        dow_multipliers = {
-            0: 1.25,  # Monday - highest
-            1: 1.15,  # Tuesday
-            2: 1.10,  # Wednesday
-            3: 1.05,  # Thursday
-            4: 0.95,  # Friday
-            5: 0.70,  # Saturday
-            6: 0.40   # Sunday - lowest
-        }
-        
-        # Add some randomness
-        dow_stats = []
-        for dow, mult in dow_multipliers.items():
-            variation = random.uniform(0.9, 1.1)
-            avg = base_enrollment * mult * variation
-            dow_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-            dow_stats.append({
-                'day_name': dow_names[dow],
-                'mean': round(avg, 1)
-            })
-        
-        # Monthly patterns (school season, financial year effects)
-        month_multipliers = {
-            1: 1.15,   # New Year effects
-            2: 0.95,
-            3: 1.05,   # Financial year end
-            4: 1.20,   # New financial year + school admissions
-            5: 1.10,
-            6: 0.85,   # Summer + monsoon
-            7: 0.80,
-            8: 0.90,   # Independence Day period
-            9: 1.15,   # School admission follow-up
-            10: 1.25,  # Festive season
-            11: 1.10,
-            12: 0.95   # Holiday season
-        }
-        
-        month_stats = []
-        month_names = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December']
-        for month, mult in month_multipliers.items():
-            variation = random.uniform(0.85, 1.15)
-            avg = base_enrollment * mult * variation
-            month_stats.append({
-                'month_name': month_names[month - 1],
-                'mean': round(avg, 1)
-            })
-        
-        # Find busiest
-        busiest_dow = max(dow_stats, key=lambda x: x['mean'])
-        busiest_month = max(month_stats, key=lambda x: x['mean'])
-        quietest_dow = min(dow_stats, key=lambda x: x['mean'])
-        quietest_month = min(month_stats, key=lambda x: x['mean'])
-        
-        # Busiest days of month (salary days, week starts)
-        busiest_days = [1, 2, 3, 10, 11, 15, 16]
-        random.shuffle(busiest_days)
-        busiest_days = sorted(busiest_days[:5])
-        
-        # Period comparison
-        month_start_avg = base_enrollment * 1.2
-        month_end_avg = base_enrollment * 1.15
-        mid_month_avg = base_enrollment * 0.9
-        
-        # Suppress generic recommendations for synthetic data - data-driven only mode
-        recommendations = [
-            "⚠️ Insufficient historical data for this district",
-            "📊 Showing estimated patterns based on regional averages",
-            "💡 Data-driven recommendations will appear when real enrollment data is available"
-        ]
-        
-        # Generate synthetic date range (last 6 months)
-        from datetime import datetime, timedelta
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=180)
-        
+        """Return error when no real data is available - synthetic data disabled."""
         return {
+            'error': f"Insufficient enrollment data for {district}, {state}",
             'state': state,
             'district': district,
-            'data_points': 0,  # Mark as no real data
-            'is_synthetic': True,
-            'data_driven_only': True,
-            'recommendations_suppressed': True,
-            'date_range': {
-                'start': start_date.strftime('%Y-%m-%d'),
-                'end': end_date.strftime('%Y-%m-%d')
-            },
-            'busiest_day_of_week': {
-                'day': busiest_dow['day_name'],
-                'avg_enrollment': busiest_dow['mean'],
-                'is_estimated': True
-            },
-            'busiest_month': {
-                'month': busiest_month['month_name'],
-                'avg_enrollment': busiest_month['mean'],
-                'is_estimated': True
-            },
-            'busiest_days_of_month': busiest_days,
-            'period_comparison': {
-                'month_start_avg': round(month_start_avg, 1),
-                'month_end_avg': round(month_end_avg, 1),
-                'mid_month_avg': round(mid_month_avg, 1),
-                'is_estimated': True
-            },
-            'day_of_week_distribution': dow_stats,
-            'monthly_distribution': month_stats,
-            'recommendations': recommendations,
-            'notice': "Generic weekday and month-based recommendations are disabled. Insights shown are estimated patterns based on regional enrollment trends."
+            'data_points': 0,
+            'notice': "No historical data available. Cannot analyze rush patterns without real enrollment data from data.gov.in API."
         }
     
     def analyze_patterns(self, df: pd.DataFrame, state: str, district: str) -> Dict[str, Any]:
@@ -378,8 +257,8 @@ class RushPredictor:
         district_df = agg_df[(agg_df['state'] == state) & (agg_df['district'] == district)]
         
         if len(district_df) < 7:
-            # Generate synthetic patterns when insufficient data
-            logger.info(f"Generating synthetic patterns for {district}, {state} (only {len(district_df)} records found)")
+            # Return error when insufficient data - no synthetic data
+            logger.warning(f"Insufficient data for {district}, {state} (only {len(district_df)} records found)")
             return self._generate_synthetic_patterns(state, district)
         
         # Day of week analysis
@@ -461,42 +340,24 @@ class RushPredictor:
         return recommendations
     
     def predict_peak_days(self, state: str, district: str, days_ahead: int = 30) -> Dict[str, Any]:
-        """Predict peak enrollment days for the next N days."""
-        import random
+        """Predict peak enrollment days for the next N days - requires trained model."""
         
         model_key = f"{state}:{district}"
         
-        # Check if model exists, otherwise use synthetic prediction
-        use_synthetic = model_key not in self.models
+        # Check if model exists - require real trained model
+        if model_key not in self.models:
+            return {
+                'error': f"No trained model for {district}, {state}. Please train the model first using real enrollment data.",
+                'state': state,
+                'district': district,
+                'notice': "Predictions require training on real enrollment data from data.gov.in API. Synthetic predictions are disabled."
+            }
         
-        if use_synthetic:
-            # Generate synthetic predictions
-            logger.info(f"Using synthetic predictions for {district}, {state}")
-            
-            # Seed for consistency
-            seed_val = sum(ord(c) for c in f"{state}{district}")
-            random.seed(seed_val)
-            np.random.seed(seed_val % (2**32))
-            
-            # Base enrollment by state tier
-            tier1_states = ['Maharashtra', 'Uttar Pradesh', 'Bihar', 'West Bengal', 'Tamil Nadu', 'Karnataka', 'Gujarat', 'Rajasthan']
-            tier2_states = ['Andhra Pradesh', 'Telangana', 'Madhya Pradesh', 'Kerala', 'Punjab', 'Haryana', 'Jharkhand', 'Odisha']
-            
-            if state in tier1_states:
-                base_enrollment = random.randint(800, 2000)
-            elif state in tier2_states:
-                base_enrollment = random.randint(400, 900)
-            else:
-                base_enrollment = random.randint(150, 500)
-            
-            stats = {'mean': base_enrollment, 'std': base_enrollment * 0.2, 'data_points': random.randint(100, 250)}
-            model_info = None
-        else:
-            model_info = self.models[model_key]
-            stats = self.district_stats.get(model_key, {})
-            base_enrollment = stats.get('mean', 500)
+        model_info = self.models[model_key]
+        stats = self.district_stats.get(model_key, {})
+        base_enrollment = stats.get('mean', 500)
         
-        # Day of week multipliers for synthetic
+        # Day of week multipliers for prediction
         dow_multipliers = {0: 1.25, 1: 1.15, 2: 1.10, 3: 1.05, 4: 0.95, 5: 0.70, 6: 0.40}
         month_multipliers = {1: 1.15, 2: 0.95, 3: 1.05, 4: 1.20, 5: 1.10, 6: 0.85, 7: 0.80, 8: 0.90, 9: 1.15, 10: 1.25, 11: 1.10, 12: 0.95}
         
@@ -520,8 +381,8 @@ class RushPredictor:
                 'festival_factor': self.FESTIVAL_MONTHS.get(future_date.month, 0)
             }
             
-            # Predict
-            if not use_synthetic and model_info and 'model' in model_info and XGBOOST_AVAILABLE:
+            # Predict using trained model
+            if 'model' in model_info and XGBOOST_AVAILABLE:
                 # XGBoost prediction
                 feature_vals = [features.get(f, 0) for f in model_info['features'][:9]]
                 # Add lag features (use mean as estimate)
@@ -530,28 +391,13 @@ class RushPredictor:
                 
                 predicted = model_info['model'].predict([feature_vals])[0]
                 confidence = 0.85 - (i * 0.01)  # Confidence decreases over time
-            elif not use_synthetic and model_info:
+            else:
                 # Statistical prediction from trained model
                 dow_factor = model_info.get('day_pattern', {}).get(features['day_of_week'], 1)
                 month_factor = model_info.get('month_pattern', {}).get(features['month'], 1)
                 base = model_info.get('mean', 100)
                 predicted = (dow_factor + month_factor) / 2
                 confidence = 0.6
-            else:
-                # Synthetic prediction
-                dow_mult = dow_multipliers.get(features['day_of_week'], 1.0)
-                month_mult = month_multipliers.get(features['month'], 1.0)
-                
-                # Add month-start/end effects
-                if features['is_month_start']:
-                    dow_mult *= 1.15
-                elif features['is_month_end']:
-                    dow_mult *= 1.10
-                
-                # Add some randomness
-                variation = random.uniform(0.85, 1.15)
-                predicted = base_enrollment * dow_mult * month_mult * variation
-                confidence = 0.70 - (i * 0.005)  # Synthetic has lower base confidence
             
             predictions.append({
                 'date': future_date.strftime('%Y-%m-%d'),
@@ -572,7 +418,7 @@ class RushPredictor:
             'peak_days': peak_days,
             'all_predictions': predictions,
             'stats': stats,
-            'is_synthetic': use_synthetic,
+            'is_synthetic': False,
             'model_version': self.model_version
         }
     

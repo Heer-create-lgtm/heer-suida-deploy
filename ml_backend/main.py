@@ -1,9 +1,9 @@
 """
 UIDAI ML Backend - FastAPI Application
 
-Combines:
-- Biometric Re-enrollment Risk Predictor
-- ML Fraud Detection Backend
+Features:
+- Enrollment Forecast: Time-series prediction for enrollment numbers
+- Rush Period Analyzer: Predict busiest days and months for centers
 
 PRIVACY SAFEGUARDS:
 - Uses ONLY aggregated data from public government APIs
@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
-from config import get_settings, OUTPUT_DIR, VISUALIZATION_DIR, MODEL_DIR, REPORT_DIR
+from config import get_settings, OUTPUT_DIR, MODEL_DIR
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Create output directories
-for directory in [OUTPUT_DIR, VISUALIZATION_DIR, MODEL_DIR, REPORT_DIR]:
+for directory in [OUTPUT_DIR, MODEL_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 
@@ -47,20 +47,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="UIDAI ML Analytics API",
     description="""
-    Unified ML-powered system for Aadhaar analytics.
+    ML-powered system for Aadhaar enrollment analytics.
     
     ## Features
-    - **Biometric Risk Prediction**: Predict authentication failure risk
-    - **Fraud Detection**: Automatic model selection and ensemble scoring
-    - **Dataset Fusion**: Combine multiple data.gov.in APIs
-    - **Explainability**: SHAP-based and human-readable explanations
-    - **Visualizations**: Interactive policy-ready charts
+    - **Enrollment Forecast**: ARIMA-based time-series predictions for enrollment volumes
+    - **Rush Period Analyzer**: Predict busiest days and months for enrollment centers
     
     ## Models Used
-    - Random Forest & XGBoost (risk prediction)
-    - Isolation Forest (anomaly detection)
-    - PyTorch Autoencoder (deep pattern recognition)
-    - HDBSCAN (spatial clustering)
+    - ARIMA/SARIMAX (time-series forecasting)
+    - Statistical analysis for peak detection
     
     **Privacy:** Uses only aggregated, anonymized government data.
     """,
@@ -75,6 +70,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:8080",
         "http://localhost:3000",
+        "http://localhost:3001",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8080",
         "*"
@@ -85,33 +81,16 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Mount static files for visualizations
+# Mount static files for outputs
 app.mount("/static", StaticFiles(directory=OUTPUT_DIR), name="static")
 
-# Try to include routers - handle both old and new structures
-try:
-    from api.routes import datasets, analysis, visualizations, selection, reports, policy_api, monitor, forecast, rush
-    # Monitoring API - Primary auditor-facing interface
-    app.include_router(monitor.router, tags=["Monitoring"])
-    # Policy API - Government-facing policy controls
-    app.include_router(policy_api.router, prefix="/api/policy", tags=["Policy Engine"])
-    # Forecast API - Time-series enrollment forecasting
-    app.include_router(forecast.router, tags=["Enrollment Forecasting"])
-    # Rush Period API - Peak day prediction
-    app.include_router(rush.router, tags=["Rush Period Prediction"])
-    # Internal APIs
-    app.include_router(datasets.router, prefix="/api/ml", tags=["Internal - Datasets"])
-    app.include_router(selection.router, prefix="/api/ml", tags=["Internal - Selection"])
-    app.include_router(analysis.router, prefix="/api/ml", tags=["Internal - Analysis"])
-    app.include_router(visualizations.router, prefix="/api/ml", tags=["Internal - Visualizations"])
-    app.include_router(reports.router, prefix="/api/ml", tags=["Internal - Reports"])
-except ImportError as e:
-    logger.warning(f"Could not import all routers: {e}")
-    # Fallback to old router structure
-    from routers import datasets, analysis, visualizations
-    app.include_router(datasets.router, prefix="/api", tags=["Datasets"])
-    app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
-    app.include_router(visualizations.router, prefix="/api", tags=["Visualizations"])
+# Import and include routers for forecast and rush
+from api.routes import forecast, rush
+
+# Forecast API - Time-series enrollment forecasting
+app.include_router(forecast.router, tags=["Enrollment Forecasting"])
+# Rush Period API - Peak day prediction
+app.include_router(rush.router, tags=["Rush Period Prediction"])
 
 
 @app.get("/")
@@ -122,15 +101,13 @@ async def root():
         "project": "UIDAI ML Analytics API",
         "version": "1.0.0",
         "endpoints": {
-            "datasets": "/api/datasets",
-            "select_dataset": "/api/select-dataset",
-            "analyze": "/api/analyze",
-            "train_model": "/api/train-model",
-            "risk_summary": "/api/risk-summary",
-            "visualizations": "/api/visualizations",
-            "explain_model": "/api/explain-model",
             "forecast_train": "/api/forecast/train",
-            "forecast_predict": "/api/forecast/predict/{district}"
+            "forecast_predict": "/api/forecast/predict/{district}",
+            "forecast_states": "/api/forecast/states",
+            "rush_states": "/api/rush/states",
+            "rush_districts": "/api/rush/districts/{state}",
+            "rush_analyze": "/api/rush/analyze/{state}/{district}",
+            "rush_predict": "/api/rush/predict/{state}/{district}"
         }
     }
 

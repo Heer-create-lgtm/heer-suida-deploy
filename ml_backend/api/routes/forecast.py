@@ -90,48 +90,18 @@ async def train_forecast_models(
                 df = ingestion.to_dataframe(data_result["records"])
                 logger.info(f"Fetched {len(df)} records from API")
         except Exception as e:
-            logger.warning(f"API fetch failed: {e}. Using synthetic data.")
+            logger.error(f"API fetch failed: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Failed to fetch data from data.gov.in API: {e}. Please ensure API key is configured."
+            )
         
-        # Generate synthetic data if API failed
+        # Require real data - do not use synthetic data
         if df is None or df.empty:
-            logger.info("Generating synthetic enrollment data for training")
-            districts = [
-                "Mumbai", "Delhi", "Bangalore", "Chennai", "Kolkata",
-                "Hyderabad", "Pune", "Ahmedabad", "Jaipur", "Lucknow",
-                "Patna", "Bhopal", "Chandigarh", "Kochi", "Indore"
-            ]
-            states = [
-                "Maharashtra", "Delhi", "Karnataka", "Tamil Nadu", "West Bengal",
-                "Telangana", "Maharashtra", "Gujarat", "Rajasthan", "Uttar Pradesh",
-                "Bihar", "Madhya Pradesh", "Punjab", "Kerala", "Madhya Pradesh"
-            ]
-            
-            # Generate 24 months of data
-            dates = pd.date_range(start=datetime.now() - timedelta(days=730), periods=730, freq='D')
-            records = []
-            
-            np.random.seed(42)
-            for i, district in enumerate(districts[:max_districts]):
-                base_enrollment = np.random.randint(500, 2000)
-                trend = np.random.uniform(0.001, 0.005)
-                seasonality = np.sin(np.linspace(0, 4*np.pi, len(dates))) * 100
-                noise = np.random.normal(0, 50, len(dates))
-                
-                for j, date in enumerate(dates):
-                    # Every 30 days, add a record
-                    if j % 30 == 0:
-                        enrollment = max(0, base_enrollment + j * trend * base_enrollment + seasonality[j] + noise[j])
-                        records.append({
-                            "date": date.strftime("%Y-%m-%d"),
-                            "state": states[i],
-                            "district": district,
-                            "age_0_5": int(enrollment * 0.2),
-                            "age_5_17": int(enrollment * 0.3),
-                            "age_18_greater": int(enrollment * 0.5)
-                        })
-            
-            df = pd.DataFrame(records)
-            logger.info(f"Generated {len(df)} synthetic records for {len(districts[:max_districts])} districts")
+            raise HTTPException(
+                status_code=404,
+                detail="No enrollment data available from API. Please try again later."
+            )
         
         # Initialize forecaster and prepare time series
         forecaster = get_forecaster()
@@ -363,45 +333,26 @@ async def train_state_forecast_models(
                 # Check if data has enough date variation for time-series
                 df['date'] = pd.to_datetime(df['date'], errors='coerce')
                 unique_dates = df['date'].nunique()
-                if unique_dates < 10:
-                    logger.warning(f"API data has only {unique_dates} unique dates, need 10+. Using synthetic data.")
-                    df = None
+                if unique_dates < 5:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"API data has only {unique_dates} unique dates, need 5+ for time-series training."
+                    )
+                elif unique_dates < 12:
+                    logger.warning(f"Limited historical data: only {unique_dates} unique dates available. ARIMA models may be less accurate.")
         except Exception as e:
-            logger.warning(f"API fetch failed: {e}. Using synthetic data.")
-        
-        # Generate synthetic state-level data if API data is insufficient
-        if df is None or df.empty:
-            logger.info("Generating synthetic state-level data for training")
-            states = forecaster.INDIAN_STATES[:20]  # Top 20 states
-            
-            dates = pd.date_range(
-                start=datetime.now() - timedelta(days=730),
-                periods=730,
-                freq='D'
+            logger.error(f"API fetch failed: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Failed to fetch data from data.gov.in API: {e}. Please ensure API key is configured."
             )
-            records = []
-            
-            np.random.seed(42)
-            for i, state in enumerate(states):
-                base_enrollment = np.random.randint(5000, 50000)
-                trend = np.random.uniform(0.001, 0.01)
-                seasonality = np.sin(np.linspace(0, 4*np.pi, len(dates))) * 1000
-                noise = np.random.normal(0, 500, len(dates))
-                
-                for j, date in enumerate(dates):
-                    if j % 30 == 0:  # Monthly records
-                        enrollment = max(0, base_enrollment + j * trend * base_enrollment + seasonality[j] + noise[j])
-                        records.append({
-                            "date": date.strftime("%Y-%m-%d"),
-                            "state": state,
-                            "district": f"{state}_District_{j % 5}",
-                            "age_0_5": int(enrollment * 0.2),
-                            "age_5_17": int(enrollment * 0.3),
-                            "age_18_greater": int(enrollment * 0.5)
-                        })
-            
-            df = pd.DataFrame(records)
-            logger.info(f"Generated {len(df)} synthetic records for {len(states)} states")
+        
+        # Require real data - do not use synthetic data
+        if df is None or df.empty:
+            raise HTTPException(
+                status_code=404,
+                detail="No enrollment data available from API. Please try again later."
+            )
         
         # Prepare state-level time series
         state_series = forecaster.prepare_state_series(df)
@@ -460,4 +411,72 @@ async def predict_single_state(
         del result["district"]
     
     return result
+
+
+@router.get("/diagnostics/{state}")
+async def get_state_diagnostics(state: str):
+    """
+    Get ARIMA model diagnostics for a state including residuals and ACF.
+    
+    Returns real residuals from the fitted ARIMA model and computed ACF values
+    that can be used to assess model fit quality.
+    """
+    import numpy as np
+    from statsmodels.tsa.stattools import acf
+    
+    forecaster = get_forecaster()
+    model_key = f"STATE:{state}"
+    
+    if model_key not in forecaster.models:
+        available = forecaster.get_available_states()
+        raise HTTPException(
+            status_code=404,
+            detail=f"No model for state '{state}'. Available: {available[:10]}..."
+        )
+    
+    try:
+        fitted_model = forecaster.models[model_key]
+        stats = forecaster.district_stats[model_key]
+        
+        # Get residuals from fitted model
+        residuals = fitted_model.resid.tolist()
+        
+        # Compute ACF (autocorrelation function) of residuals
+        if len(residuals) > 5:
+            acf_values = acf(residuals, nlags=min(15, len(residuals) - 1), fft=True).tolist()
+        else:
+            acf_values = [1.0]  # Only lag 0
+        
+        # Compute Ljung-Box test if available
+        ljung_box_pvalue = None
+        try:
+            from statsmodels.stats.diagnostic import acorr_ljungbox
+            lb_result = acorr_ljungbox(residuals, lags=[10], return_df=True)
+            ljung_box_pvalue = float(lb_result['lb_pvalue'].values[0])
+        except:
+            pass
+        
+        return {
+            "state": state,
+            "model_order": stats.get("order"),
+            "data_points": stats.get("data_points"),
+            "residuals": residuals[-30:],  # Last 30 residuals for plotting
+            "acf_values": acf_values,
+            "residual_stats": {
+                "mean": float(np.mean(residuals)),
+                "std": float(np.std(residuals)),
+                "min": float(np.min(residuals)),
+                "max": float(np.max(residuals))
+            },
+            "ljung_box_pvalue": ljung_box_pvalue,
+            "aic": stats.get("aic"),
+            "mape": stats.get("mape"),
+            "mae": stats.get("mae"),
+            "rmse": stats.get("rmse")
+        }
+        
+    except Exception as e:
+        logger.error(f"Diagnostics failed for {state}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
